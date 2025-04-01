@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fingi</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body id="game-container">
+  <!-- 🔽 START SCREEN -->
+  <div id="start-screen">
+    <h1 class="game-title">
+      <p>FEED</p>
+      <p>THE</p>
+      <p>MEOW!</p>
+    </h1>
+    <div class="play-button" onclick="startGame()"></div>
+    <div class="bottom-left-button" onclick="extraFunction()"></div>
+
+    <!-- 🔽 KOMMENT MEZŐ A FŐOLDALON -->
+    <div id="comment-section" style="max-width: 700px; margin: 40px auto; background: #fff; padding: 20px; border-radius: 8px;">
+      <h3>Hozzászólások</h3>
+      <div id="comments-list" style="margin-bottom: 20px;"></div>
+
+      <textarea id="comment-input" placeholder="Írd be a hozzászólásod..." style="width: 100%; height: 80px; margin-bottom: 10px;"></textarea><br>
+      <input type="text" id="comment-name" placeholder="Neved" style="width: 100%; margin-bottom: 10px;">
+      <button onclick="postComment()" style="width: 100%; padding: 10px; background-color: #345; color: white; border: none; border-radius: 5px;">Küldés</button>
+      
+    </div>
+  </div>
+
+  <div id="login-modal" style="display: none;">
+    <div class="login-container">
+      <h2 id="modal-title">Bejelentkezés</h2>
+
+      <input type="text" id="register-name" placeholder="Név" style="display: none;" />
+      <input type="email" id="user-email" placeholder="Email" />
+      <input type="password" id="user-password" placeholder="Jelszó" />
+
+      <button id="login-button">Bejelentkezés</button>
+      <p id="toggle-text" style="margin-top: 10px;">
+        Még nincs fiókod? <a href="#" id="toggle-register">Regisztráció</a>
+        <button id="close-register">Bezár</button>
+      </p>
+
+      <button id="close-login" style="margin-top: 10px;">Bezár</button>
+      <div id="menu-auth-buttons" style="text-align: center; margin-top: 15px;">
+        <button id="logout-button" style="display: none;">Kijelentkezés</button>
+      </div>
+      <p id="auth-message" style="margin-top: 10px; color: red;"></p>
+
+    </div>
+  </div>
+
+  <div id="game-screen" style="display: none;">
+    <canvas id="gameCanvas" width="800" height="900"></canvas>
+
+    <div id="game-over-screen" class="game-over-screen" style="display: flex;">
+      <h1 class="game-over-title">Game Over</h1>
+      <h2 id="final-score">Your Score: 0</h2>
+      <div class="play-again-button" onclick="startGame()"></div>
+      <div class="quit-button" onclick="quitGame()"></div>
+    </div>
+  </div>
+
+  <button id="menu-button" style="display: none;">Menü</button>
+
+  <div id="menu-module" style="display: none; background: white; padding: 10px; border: 1px solid black;">
+    <h2>Felhasználói információk</h2>
+    <ul>
+        <li><strong>Név:</strong> Betöltés...</li>
+        <li><strong>Email:</strong> Betöltés...</li>
+        <li><strong>Szerepkör:</strong> Betöltés...</li>
+    </ul>
+    <h3>Rekordjaid:</h3>
+    <ul id="record-list">
+        <li>Betöltés...</li>
+    </ul>
+    
+    <!-- Admin link megjelenítése, ha a felhasználó admin -->
+    <div id="admin-link" style="display: none;">
+        <a href="admin.html">Admin oldal</a>
+    </div>
+</div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+  <script>
+const firebaseConfig = {
+    apiKey: "AIzaSyA6p7PMWu6Au85AQXZ0l5aleAWBR2uUBIg",
+    authDomain: "vizsga-55ea5.firebaseapp.com",
+    databaseURL: "https://vizsga-55ea5-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "vizsga-55ea5",
+    storageBucket: "vizsga-55ea5.appspot.com",
+    messagingSenderId: "457886173828",
+    appId: "1:457886173828:web:145dbde8e65d08344a10d1"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+
+  firebase.auth().onAuthStateChanged(function(user) {
+    const loginToggle = document.getElementById('login-toggle');
+    const logoutButton = document.getElementById('logout-button');
+  
+    if (user) {
+      if (loginToggle) loginToggle.style.display = 'none';
+      if (logoutButton) logoutButton.style.display = 'inline-block';
+      showAuthMessage("Sikeres bejelentkezés!", "green");
+    } else {
+      if (loginToggle) loginToggle.style.display = 'inline-block';
+      if (logoutButton) logoutButton.style.display = 'none';
+    }
+  });
+
+  document.addEventListener('click', function (event) {
+    if (event.target && event.target.id === 'logout-button') {
+      firebase.auth().signOut().then(() => {
+        document.getElementById('login-modal').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'flex';
+        showAuthMessage("Sikeres kijelentkezés!", "green");
+      }).catch((error) => {
+        showAuthMessage("Hiba történt kijelentkezéskor. Kérlek, próbáld újra!", "red");
+      });
+    }
+  });
+
+  function showAuthMessage(message, color = "red") {
+    let msg = document.getElementById('auth-message');
+    if (!msg) {
+      msg = document.createElement('p');
+      msg.id = 'auth-message';
+      msg.style.marginTop = "10px";
+      msg.style.textAlign = "center";
+      document.body.appendChild(msg);
+    }
+    msg.textContent = message;
+    msg.style.color = color;
+    msg.style.display = 'block';
+    setTimeout(() => { msg.textContent = ""; }, 5000);
+  }
+
+  function saveGameRecord(score) {
+    const user = firebase.auth().currentUser;
+    if (user) {
+        const userId = user.uid;
+        const userEmail = user.email;
+        const userName = user.displayName || "N/A";  // Ha nincs név beállítva, akkor "N/A"
+
+        const recordsRef = firebase.database().ref('records/' + userId).push(); // Új bejegyzés létrehozása
+        
+        recordsRef.set({
+            name: userName,
+            email: userEmail,
+            score: score,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        }).then(() => {
+            console.log('Rekord sikeresen mentve!');
+        }).catch((error) => {
+            console.error('Hiba a rekord mentése közben: ', error);
+        });
+    } else {
+        console.log('Nincs bejelentkezett felhasználó!');
+    }
+}
+
+</script>
+
+  <!-- 🔽 A végén jön a játékscript -->
+  <script src="script.js"></script>
+  
+</body>
+
+</html>

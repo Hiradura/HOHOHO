@@ -1,0 +1,16 @@
+    {
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": true,  
+        ".write": true, 
+      }
+    },
+    "records": {
+      "$uid": {
+        ".read": true,  
+        ".write": true, 
+      }
+    }
+  }
+}

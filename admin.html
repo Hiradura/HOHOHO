@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Panel</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    #admin-panel-screen { display: none; padding: 20px; background-color: #f4f4f4; }
+    .user-item { background-color: #d9e8ff; padding: 10px; margin: 10px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+    .comment-item { background-color: #ffe0e0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+    #admin-auth-message { text-align: center; margin: 20px; padding: 10px; background-color: #ffcccc; color: red; display: none; }
+    button { padding: 10px; font-size: 14px; margin-top: 10px; cursor: pointer; }
+    .admin-login-buttons { display: flex; justify-content: center; margin-top: 50px; }
+  </style>
+</head>
+<body>
+  <!-- Panel -->
+  <div id="admin-panel-screen">
+    <h2>Admin Panel</h2>
+    <div id="admin-users-list"><h3>Regisztrált felhasználók</h3></div>
+    <div id="admin-comments-list"><h3>Reportált kommentek</h3></div>
+  </div>
+
+  <!-- Logout -->
+  <div class="admin-login-buttons">
+    <button id="admin-logout-button" style="display:none;"><a href="index.html" style="text-decoration: none; color: black;">Admin Kijelentkezés</a></button>
+  </div>
+
+  <div id="admin-auth-message"></div>
+
+  <!-- Modular Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.10.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.10.0/firebase-auth.js";
+    import { getDatabase, ref, get, remove } from "https://www.gstatic.com/firebasejs/9.10.0/firebase-database.js";
+
+    const firebaseUrl = "http://127.0.0.1:5001/vizsga-55ea5/us-central1/api"
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA6p7PMWu6Au85AQXZ0l5aleAWBR2uUBIg",
+      authDomain: "vizsga-55ea5.firebaseapp.com",
+      databaseURL: "https://vizsga-55ea5-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "vizsga-55ea5",
+      storageBucket: "vizsga-55ea5.appspot.com",
+      messagingSenderId: "457886173828",
+      appId: "1:457886173828:web:145dbde8e65d08344a10d1"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const token = await user.getIdToken(true);
+        const res = await fetch(`${firebaseUrl}/getClaims/${user.uid}`, {
+          headers: { "Authorization": token }
+        });
+        const claims = await res.json();
+
+        if (claims.admin) {
+          document.getElementById('admin-panel-screen').style.display = 'block';
+          document.getElementById('admin-logout-button').style.display = 'inline-block';
+          showAdminAuthMessage("Üdv újra, admin!", "green");
+          loadUsers(token);
+          loadReportedComments();
+        } else {
+          showAdminAuthMessage("Nincs admin jogosultságod!", "red");
+        }
+      } else {
+        showAdminAuthMessage("Nem vagy bejelentkezve!", "red");
+      }
+    });
+
+    document.getElementById('admin-logout-button').addEventListener('click', () => {
+      signOut(auth).then(() => {
+        
+        showAdminAuthMessage("Kijelentkezve!", "green");
+        document.getElementById('admin-panel-screen').style.display = 'none';
+        document.getElementById('admin-logout-button').style.display = 'none';
+      });
+    });
+
+    async function loadUsers(token) {
+      const res = await fetch(`${firebaseUrl}/users`, { headers: { "Authorization": token } });
+      const users = await res.json();
+      const list = document.getElementById('admin-users-list');
+      list.innerHTML = "<h3>Regisztrált felhasználók</h3>";
+
+      users.forEach(user => {
+        const role = user.claims.admin ? "admin" : user.claims.moderator ? "moderator" : "user";
+        const el = document.createElement('div');
+        el.classList.add('user-item');
+        el.innerHTML = `
+          <div>
+            <p><strong>Név:</strong> ${user.displayName || "N/A"}</p>
+            <p><strong>Email:</strong> ${user.email}</p>
+            <p><strong>Jogosultság:</strong> ${role}</p>
+          </div>
+          <div>
+            <button onclick="updateUserRole('${user.uid}', 'admin')">Admin jog</button>
+            <button onclick="updateUserRole('${user.uid}', 'user')">User jog</button>
+            <button onclick="deleteUserAccount('${user.uid}')">Fiók törlése</button>
+          </div>
+        `;
+        list.appendChild(el);
+      });
+    }
+
+    window.updateUserRole = async (uid, role) => {
+      const token = await auth.currentUser.getIdToken(true);
+      await fetch(`${firebaseUrl}/setCustomClaims`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": token },
+        body: JSON.stringify({ uid, claims: role === "admin" ? { admin: true } : {} })
+      });
+      alert(`Jogosultság beállítva: ${role}`);
+      loadUsers(token);
+    };
+
+    window.deleteUserAccount = async (uid) => {
+      if (!confirm("Biztosan törölni szeretnéd ezt a felhasználót?")) return;
+      const token = await auth.currentUser.getIdToken(true); // token lekérése
+      await fetch(`${firebaseUrl}/deleteUser`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token
+        },
+        body: JSON.stringify({ uid })
+      });
+      alert("Felhasználó törölve!");
+      loadUsers(token); // token átadása
+    };
+
+    function loadReportedComments() {
+      const commentsList = document.getElementById('admin-comments-list');
+      commentsList.innerHTML = "<h3>Reportált kommentek</h3>";
+      get(ref(db, 'comments')).then(snapshot => {
+        if (snapshot.exists()) {
+          let found = false;
+          snapshot.forEach(snap => {
+            const comment = snap.val();
+            const commentId = snap.key;
+            if (comment.reports) {
+              found = true;
+              Object.values(comment.reports).forEach(report => {
+                const div = document.createElement('div');
+                div.classList.add('comment-item');
+                div.innerHTML = `
+                  <p><strong>Felhasználó:</strong> ${comment.name}</p>
+                  <p><strong>Komment:</strong> ${comment.text}</p>
+                  <p><strong>Jelentés oka:</strong> ${report.reportReason}</p>
+                  <p><strong>Jelentés ideje:</strong> ${new Date(report.timestamp).toLocaleString()}</p>
+                  <button onclick="deleteComment('${commentId}')">Komment törlése</button>
+                `;
+                commentsList.appendChild(div);
+              });
+            }
+          });
+          if (!found) commentsList.innerHTML += "<p>Nincsenek jelentett kommentek.</p>";
+        } else {
+          commentsList.innerHTML += "<p>Nincsenek kommentek.</p>";
+        }
+      });
+    }
+
+    window.deleteComment = (commentId) => {
+      if (!confirm("Biztosan törölni szeretnéd ezt a kommentet?")) return;
+      remove(ref(db, `comments/${commentId}`)).then(() => {
+        alert("Komment törölve!");
+        loadReportedComments();
+      });
+    };
+
+    function showAdminAuthMessage(message, color = "red") {
+      const msg = document.getElementById('admin-auth-message');
+      msg.textContent = message;
+      msg.style.color = color;
+      msg.style.display = 'block';
+      setTimeout(() => { msg.style.display = 'none'; }, 5000);
+    }
+  </script>
+  <button id="back"><a id="back" style="text-decoration: none; color: black;" href="index.html">Vissza</a></button>
+</body>
+</html>
